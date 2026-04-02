@@ -2,26 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY);
-
-// Configuration SMTP pour les emails
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const productsFile = path.join(__dirname, 'products.json');
 
 // ========== Routes Stripe Terminal ==========
-
 app.post('/connection_token', async (req, res) => {
   try {
     const token = await stripe.terminal.connectionTokens.create();
@@ -52,7 +43,6 @@ app.post('/create_payment_intent', async (req, res) => {
   }
 });
 
-// (Optionnel) capture si vous passez en manuel
 app.post('/capture_payment_intent', async (req, res) => {
   const { payment_intent_id } = req.body;
   if (!payment_intent_id) {
@@ -67,7 +57,17 @@ app.post('/capture_payment_intent', async (req, res) => {
   }
 });
 
-// ========== Route pour les emails ==========
+// ========== Routes Email ==========
+// Configuration SMTP (à configurer avec variables d'environnement)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 app.post('/send_emails', async (req, res) => {
   const {
@@ -101,16 +101,13 @@ app.post('/send_emails', async (req, res) => {
   }
 });
 
-// Route de test
-app.get('/ping', (req, res) => {
-  res.json({ status: 'ok' });
-});
+// ========== Routes Produits (CRUD) ==========
+// Initialiser un fichier products.json s'il n'existe pas
+if (!fs.existsSync(productsFile)) {
+  fs.writeFileSync(productsFile, JSON.stringify([], null, 2));
+}
 
-const fs = require('fs');
-const path = require('path');
-const productsFile = path.join(__dirname, 'products.json');
-
-// Lire tous les produits
+// GET tous les produits
 app.get('/api/products', (req, res) => {
   try {
     const data = fs.readFileSync(productsFile, 'utf8');
@@ -120,14 +117,16 @@ app.get('/api/products', (req, res) => {
   }
 });
 
-// Ajouter un produit
+// POST créer un nouveau produit
 app.post('/api/products', (req, res) => {
   try {
-    const { name, price, image } = req.body;
-    if (!name || !price) return res.status(400).json({ error: 'Missing name or price' });
+    const { name, price, image, promo } = req.body;
+    if (!name || price === undefined) {
+      return res.status(400).json({ error: 'Missing name or price' });
+    }
     const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
     const newId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
-    const newProduct = { id: newId, name, price, image: image || '🕐', promo: null };
+    const newProduct = { id: newId, name, price, image: image || '🕐', promo: promo || null };
     products.push(newProduct);
     fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
     res.json(newProduct);
@@ -136,7 +135,7 @@ app.post('/api/products', (req, res) => {
   }
 });
 
-// Modifier un produit (prix, nom, promo)
+// PUT modifier un produit
 app.put('/api/products/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -155,18 +154,25 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-// Supprimer un produit
+// DELETE supprimer un produit
 app.delete('/api/products/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
     const newProducts = products.filter(p => p.id !== id);
-    if (newProducts.length === products.length) return res.status(404).json({ error: 'Product not found' });
+    if (newProducts.length === products.length) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
     fs.writeFileSync(productsFile, JSON.stringify(newProducts, null, 2));
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Route de test
+app.get('/ping', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 const port = process.env.PORT || 10000;
