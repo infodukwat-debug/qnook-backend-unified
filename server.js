@@ -5,7 +5,14 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-app.use(cors());
+
+// ========== Configuration CORS explicite ==========
+app.use(cors({
+  origin: '*', // En production, remplacez '*' par l'URL de votre frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY);
