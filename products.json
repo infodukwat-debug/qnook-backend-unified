@@ -4,7 +4,7 @@
     "name": "1 min",
     "price": 50,
     "image": "🕐",
-    "promo": null   // ou { type: "percent", value: 20 } pour -20%
+    "promo": null
   },
   {
     "id": 2,
