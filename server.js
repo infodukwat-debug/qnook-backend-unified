@@ -106,6 +106,69 @@ app.get('/ping', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+const fs = require('fs');
+const path = require('path');
+const productsFile = path.join(__dirname, 'products.json');
+
+// Lire tous les produits
+app.get('/api/products', (req, res) => {
+  try {
+    const data = fs.readFileSync(productsFile, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ajouter un produit
+app.post('/api/products', (req, res) => {
+  try {
+    const { name, price, image } = req.body;
+    if (!name || !price) return res.status(400).json({ error: 'Missing name or price' });
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const newId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
+    const newProduct = { id: newId, name, price, image: image || '🕐', promo: null };
+    products.push(newProduct);
+    fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
+    res.json(newProduct);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Modifier un produit (prix, nom, promo)
+app.put('/api/products/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, price, image, promo } = req.body;
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const index = products.findIndex(p => p.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Product not found' });
+    if (name !== undefined) products[index].name = name;
+    if (price !== undefined) products[index].price = price;
+    if (image !== undefined) products[index].image = image;
+    if (promo !== undefined) products[index].promo = promo;
+    fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
+    res.json(products[index]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Supprimer un produit
+app.delete('/api/products/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const newProducts = products.filter(p => p.id !== id);
+    if (newProducts.length === products.length) return res.status(404).json({ error: 'Product not found' });
+    fs.writeFileSync(productsFile, JSON.stringify(newProducts, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const port = process.env.PORT || 10000;
 app.listen(port, '0.0.0.0', () => {
   console.log(`Backend unifié démarré sur le port ${port}`);
