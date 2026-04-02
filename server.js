@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
-const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 
@@ -24,18 +23,22 @@ app.post('/connection_token', async (req, res) => {
 });
 
 app.post('/create_payment_intent', async (req, res) => {
-  const { amount, currency, description, payment_method_types } = req.body;
+  const { amount, currency, description, payment_method_types, email } = req.body;
   if (!amount || !currency) {
     return res.status(400).json({ error: 'Missing amount or currency' });
   }
   try {
-    const intent = await stripe.paymentIntents.create({
+    const intentParams = {
       amount: parseInt(amount),
       currency: currency,
       payment_method_types: payment_method_types || ['card_present'],
       capture_method: 'automatic',
       description: description || 'Paiement Qnook',
-    });
+    };
+    if (email) {
+      intentParams.receipt_email = email;
+    }
+    const intent = await stripe.paymentIntents.create(intentParams);
     res.json({ client_secret: intent.client_secret });
   } catch (err) {
     console.error(err);
@@ -57,58 +60,11 @@ app.post('/capture_payment_intent', async (req, res) => {
   }
 });
 
-// ========== Routes Email ==========
-// Configuration SMTP (variables d'environnement)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-app.post('/send_emails', async (req, res) => {
-  const {
-    email, wantReceipt, wantNotification, productName, durationChosen,
-    actualDuration, extraMinutes, totalAmount, currency, paymentIntentId
-  } = req.body;
-
-  // On répond toujours 200, même si l'envoi échoue (le paiement est déjà réussi)
-  try {
-    if (wantReceipt) {
-      const receiptBody = `Merci pour votre utilisation.\n\nProduit: ${productName}\nDurée choisie: ${durationChosen} min\nTemps réel: ${actualDuration} min\nMinutes supplémentaires: ${extraMinutes}\nTotal payé: ${totalAmount} ${currency}\nID paiement: ${paymentIntentId}`;
-      await transporter.sendMail({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: "Votre reçu Qnook",
-        text: receiptBody,
-      });
-    }
-    if (wantNotification) {
-      const notificationBody = "Votre session Qnook est terminée. Merci de votre visite.";
-      await transporter.sendMail({
-        from: process.env.FROM_EMAIL,
-        to: email,
-        subject: "Fin de votre session Qnook",
-        text: notificationBody,
-      });
-    }
-  } catch (err) {
-    console.error("Erreur envoi email (non bloquante) :", err);
-    // Ne pas propager l'erreur au frontend
-  }
-  res.json({ success: true });
-});
-
 // ========== Routes Produits (CRUD) ==========
-// Initialiser le fichier products.json s'il n'existe pas
 if (!fs.existsSync(productsFile)) {
   fs.writeFileSync(productsFile, JSON.stringify([], null, 2));
 }
 
-// GET tous les produits
 app.get('/api/products', (req, res) => {
   try {
     const data = fs.readFileSync(productsFile, 'utf8');
@@ -119,7 +75,6 @@ app.get('/api/products', (req, res) => {
   }
 });
 
-// POST créer un nouveau produit
 app.post('/api/products', (req, res) => {
   try {
     const { name, price, image, promo } = req.body;
@@ -137,7 +92,6 @@ app.post('/api/products', (req, res) => {
   }
 });
 
-// PUT modifier un produit
 app.put('/api/products/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -156,7 +110,6 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-// DELETE supprimer un produit
 app.delete('/api/products/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -172,7 +125,6 @@ app.delete('/api/products/:id', (req, res) => {
   }
 });
 
-// Route de test
 app.get('/ping', (req, res) => {
   res.json({ status: 'ok' });
 });
