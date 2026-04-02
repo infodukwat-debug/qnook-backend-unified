@@ -58,7 +58,7 @@ app.post('/capture_payment_intent', async (req, res) => {
 });
 
 // ========== Routes Email ==========
-// Configuration SMTP (à configurer avec variables d'environnement)
+// Configuration SMTP (variables d'environnement)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -75,6 +75,7 @@ app.post('/send_emails', async (req, res) => {
     actualDuration, extraMinutes, totalAmount, currency, paymentIntentId
   } = req.body;
 
+  // On répond toujours 200, même si l'envoi échoue (le paiement est déjà réussi)
   try {
     if (wantReceipt) {
       const receiptBody = `Merci pour votre utilisation.\n\nProduit: ${productName}\nDurée choisie: ${durationChosen} min\nTemps réel: ${actualDuration} min\nMinutes supplémentaires: ${extraMinutes}\nTotal payé: ${totalAmount} ${currency}\nID paiement: ${paymentIntentId}`;
@@ -94,15 +95,15 @@ app.post('/send_emails', async (req, res) => {
         text: notificationBody,
       });
     }
-    res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error("Erreur envoi email (non bloquante) :", err);
+    // Ne pas propager l'erreur au frontend
   }
+  res.json({ success: true });
 });
 
 // ========== Routes Produits (CRUD) ==========
-// Initialiser un fichier products.json s'il n'existe pas
+// Initialiser le fichier products.json s'il n'existe pas
 if (!fs.existsSync(productsFile)) {
   fs.writeFileSync(productsFile, JSON.stringify([], null, 2));
 }
@@ -113,6 +114,7 @@ app.get('/api/products', (req, res) => {
     const data = fs.readFileSync(productsFile, 'utf8');
     res.json(JSON.parse(data));
   } catch (err) {
+    console.error("Erreur lecture products.json :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
