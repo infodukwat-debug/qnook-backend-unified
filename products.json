@@ -1,0 +1,59 @@
+[
+  {
+    "id": 1,
+    "name": "1 min",
+    "price": 50,
+    "image": "🕐",
+    "promo": null   // ou { type: "percent", value: 20 } pour -20%
+  },
+  {
+    "id": 2,
+    "name": "5 mins",
+    "price": 239,
+    "image": "🕔",
+    "promo": null
+  },
+  {
+    "id": 3,
+    "name": "10 mins",
+    "price": 449,
+    "image": "🕔",
+    "promo": null
+  },
+  {
+    "id": 4,
+    "name": "15 mins",
+    "price": 700,
+    "image": "🕔",
+    "promo": null
+  },
+
+  {
+    "id": 5,
+    "name": "20 mins",
+    "price": 995,
+    "image": "🕔",
+    "promo": null
+  },
+  {
+    "id": 6,
+    "name": "30 mins",
+    "price": 1400,
+    "image": "🕔",
+    "promo": null
+  },
+  {
+    "id": 7,
+    "name": "60 mins",
+    "price": 2500,
+    "image": "🕔",
+    "promo": null
+  },
+  {
+    "id": 8,
+    "name": "120 mins",
+    "price": 5500,
+    "image": "🕔",
+    "promo": null
+  }
+]
