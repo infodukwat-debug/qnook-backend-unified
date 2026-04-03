@@ -29,7 +29,7 @@ app.post('/connection_token', async (req, res) => {
   }
 });
 
-// Création d'un PaymentIntent en capture manuelle (préautorisation)
+// Création d'un PaymentIntent avec capture manuelle ET support des autorisations incrémentales
 app.post('/create_payment_intent', async (req, res) => {
   const { amount, currency, description, payment_method_types, email } = req.body;
   if (!amount || !currency) {
@@ -40,8 +40,10 @@ app.post('/create_payment_intent', async (req, res) => {
       amount: parseInt(amount),
       currency: currency,
       payment_method_types: payment_method_types || ['card_present'],
-      capture_method: 'manual', // ← Préautorisation (pas de débit immédiat)
+      capture_method: 'manual', // ← Préautorisation
       description: description || 'Paiement Qnook',
+      // 👇 AJOUT OBLIGATOIRE pour permettre l'augmentation d'autorisation
+      request_incremental_authorization_support: true,
     };
     if (email) {
       intentParams.receipt_email = email;
@@ -85,7 +87,7 @@ app.post('/end-session', async (req, res) => {
   }
 });
 
-// Route de capture simple (si vous voulez capturer sans incrément)
+// Route de capture simple (conservée pour compatibilité)
 app.post('/capture_payment_intent', async (req, res) => {
   const { payment_intent_id } = req.body;
   if (!payment_intent_id) {
