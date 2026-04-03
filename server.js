@@ -15,7 +15,11 @@ app.use(cors({
 
 app.use(express.json());
 
-const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY);
+// Initialisation de Stripe avec une version d'API récente (nécessaire pour les autorisations incrémentales)
+const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY, {
+  apiVersion: '2025-02-24.acacia' // 👈 Version qui supporte request_incremental_authorization_support
+});
+
 const productsFile = path.join(__dirname, 'products.json');
 
 // ========== Routes Stripe Terminal ==========
@@ -42,8 +46,7 @@ app.post('/create_payment_intent', async (req, res) => {
       payment_method_types: payment_method_types || ['card_present'],
       capture_method: 'manual', // ← Préautorisation
       description: description || 'Paiement Qnook',
-      // 👇 AJOUT OBLIGATOIRE pour permettre l'augmentation d'autorisation
-      request_incremental_authorization_support: true,
+      request_incremental_authorization_support: true, // ✅ Permet l'augmentation d'autorisation
     };
     if (email) {
       intentParams.receipt_email = email;
