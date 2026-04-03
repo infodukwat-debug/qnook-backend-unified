@@ -29,6 +29,7 @@ app.post('/connection_token', async (req, res) => {
   }
 });
 
+// Création d'un PaymentIntent en capture manuelle (préautorisation)
 app.post('/create_payment_intent', async (req, res) => {
   const { amount, currency, description, payment_method_types, email } = req.body;
   if (!amount || !currency) {
@@ -39,7 +40,7 @@ app.post('/create_payment_intent', async (req, res) => {
       amount: parseInt(amount),
       currency: currency,
       payment_method_types: payment_method_types || ['card_present'],
-      capture_method: 'automatic',
+      capture_method: 'manual', // ← Préautorisation (pas de débit immédiat)
       description: description || 'Paiement Qnook',
     };
     if (email) {
@@ -53,6 +54,38 @@ app.post('/create_payment_intent', async (req, res) => {
   }
 });
 
+// Route pour terminer la session et facturer le temps supplémentaire
+app.post('/end-session', async (req, res) => {
+  const { paymentIntentId, baseAmount, extraMinutes, pricePerMinute } = req.body;
+  if (!paymentIntentId || baseAmount === undefined || extraMinutes === undefined || pricePerMinute === undefined) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const extraAmount = extraMinutes * pricePerMinute;
+  const totalAmount = baseAmount + extraAmount;
+
+  try {
+    // 1. Si dépassement, augmenter l'autorisation
+    if (extraAmount > 0) {
+      const incrementedIntent = await stripe.paymentIntents.incrementAuthorization(
+        paymentIntentId,
+        { amount: totalAmount }
+      );
+      console.log(`✅ Autorisation augmentée : ${totalAmount} centimes (${extraMinutes} min supp.)`);
+    }
+
+    // 2. Capturer le paiement (le montant total sera débité)
+    const capturedIntent = await stripe.paymentIntents.capture(paymentIntentId);
+    console.log(`✅ Paiement capturé : ${capturedIntent.amount} centimes`);
+
+    res.json({ success: true, totalAmount: totalAmount });
+  } catch (err) {
+    console.error("Erreur lors de la fin de session :", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Route de capture simple (si vous voulez capturer sans incrément)
 app.post('/capture_payment_intent', async (req, res) => {
   const { payment_intent_id } = req.body;
   if (!payment_intent_id) {
