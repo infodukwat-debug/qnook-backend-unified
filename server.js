@@ -3,6 +3,7 @@ const cors = require('cors');
 const Stripe = require('stripe');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
@@ -10,6 +11,17 @@ app.use(express.json());
 
 const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY);
 const productsFile = path.join(__dirname, 'products.json');
+
+// ========== Configuration Nodemailer ==========
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 // ========== Routes Stripe Terminal ==========
 app.post('/connection_token', async (req, res) => {
@@ -21,7 +33,6 @@ app.post('/connection_token', async (req, res) => {
   }
 });
 
-// Création d'un PaymentIntent avec capture automatique (paiement immédiat)
 app.post('/create_payment_intent', async (req, res) => {
   const { amount, currency, description, payment_method_types, email } = req.body;
   if (!amount || !currency) return res.status(400).json({ error: 'Missing amount or currency' });
@@ -30,7 +41,7 @@ app.post('/create_payment_intent', async (req, res) => {
       amount: parseInt(amount),
       currency,
       payment_method_types: payment_method_types || ['card_present'],
-      capture_method: 'automatic', // Paiement immédiat
+      capture_method: 'automatic',
       description: description || 'Paiement Qnook',
     };
     if (email) intentParams.receipt_email = email;
@@ -41,8 +52,31 @@ app.post('/create_payment_intent', async (req, res) => {
   }
 });
 
-// Route pour les produits
+// ========== Route pour le rappel ==========
+app.post('/send-reminder', async (req, res) => {
+  const { email, productName, durationChosen } = req.body;
+  if (!email || !productName || durationChosen === undefined) {
+    return res.status(400).json({ error: 'Missing fields' });
+  }
+  try {
+    const subject = `Rappel Qnook : votre session se termine dans 5 minutes`;
+    const text = `Bonjour,\n\nVotre session de ${durationChosen} minutes choisie pour "${productName}" se terminera dans 5 minutes.\n\nMerci de votre visite !\n\nL'équipe Qnook`;
+    await transporter.sendMail({
+      from: process.env.FROM_EMAIL,
+      to: email,
+      subject: subject,
+      text: text,
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Erreur envoi rappel:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== Routes Produits (CRUD) ==========
 if (!fs.existsSync(productsFile)) fs.writeFileSync(productsFile, JSON.stringify([], null, 2));
+
 app.get('/api/products', (req, res) => {
   try {
     const data = fs.readFileSync(productsFile, 'utf8');
@@ -51,7 +85,52 @@ app.get('/api/products', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// (autres routes CRUD inchangées, non recopiées pour la lisibilité, mais à conserver)
+
+app.post('/api/products', (req, res) => {
+  try {
+    const { name, price, image, promo } = req.body;
+    if (!name || price === undefined) return res.status(400).json({ error: 'Missing name or price' });
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const newId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
+    const newProduct = { id: newId, name, price, image: image || '🕐', promo: promo || null };
+    products.push(newProduct);
+    fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
+    res.json(newProduct);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/products/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, price, image, promo } = req.body;
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const index = products.findIndex(p => p.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Product not found' });
+    if (name !== undefined) products[index].name = name;
+    if (price !== undefined) products[index].price = price;
+    if (image !== undefined) products[index].image = image;
+    if (promo !== undefined) products[index].promo = promo;
+    fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
+    res.json(products[index]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/products/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
+    const newProducts = products.filter(p => p.id !== id);
+    if (newProducts.length === products.length) return res.status(404).json({ error: 'Product not found' });
+    fs.writeFileSync(productsFile, JSON.stringify(newProducts, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
