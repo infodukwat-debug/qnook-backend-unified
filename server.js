@@ -45,7 +45,7 @@ app.post('/create_payment_intent', async (req, res) => {
       description: description || 'Paiement Qnook',
       payment_method_options: {
         card_present: {
-          request_incremental_authorization_support: true, // indispensable pour incrementAuthorization
+          request_incremental_authorization_support: true, // 👈 Active les incréments
         },
       },
     };
@@ -138,8 +138,7 @@ app.delete('/api/products/:id', (req, res) => {
   }
 });
 
-// ========== ROUTES POUR LA GESTION DU TEMPS SUPPLÉMENTAIRE ==========
-
+// ========== Routes pour la gestion du temps supplémentaire ==========
 app.post('/increment-authorization', async (req, res) => {
   const { paymentIntentId, newAmount } = req.body;
   if (!paymentIntentId || !newAmount) {
