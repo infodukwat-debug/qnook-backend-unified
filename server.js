@@ -6,9 +6,14 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 
 const app = express();
+
+// ========== Configuration CORS (avant les routes) ==========
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+
+// ========== Middleware JSON pour les routes normales ==========
 app.use(express.json());
 
+// ========== Initialisation Stripe ==========
 const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY);
 const productsFile = path.join(__dirname, 'products.json');
 
@@ -45,7 +50,7 @@ app.post('/create_payment_intent', async (req, res) => {
       description: description || 'Paiement Qnook',
       payment_method_options: {
         card_present: {
-          request_incremental_authorization_support: true, // 👈 Active les incréments
+          request_incremental_authorization_support: true,
         },
       },
     };
@@ -58,7 +63,7 @@ app.post('/create_payment_intent', async (req, res) => {
   }
 });
 
-// ========== Route pour le rappel ==========
+// ========== Route pour le rappel email ==========
 app.post('/send-reminder', async (req, res) => {
   const { email, productName, durationChosen } = req.body;
   if (!email || !productName || durationChosen === undefined) {
@@ -170,6 +175,44 @@ app.post('/capture-payment', async (req, res) => {
   }
 });
 
+// ========== ROUTE WEBHOOK (doit être avant la route /ping et /, et après les middlewares) ==========
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    // La clé secrète du webhook doit être définie dans les variables d'environnement
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.error("⚠️  STRIPE_WEBHOOK_SECRET non définie dans l'environnement.");
+      return res.status(500).send('Webhook secret manquant');
+    }
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.log(`⚠️  Webhook signature verification failed.`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Gestion des événements
+  switch (event.type) {
+    case 'payment_intent.capture_failed':
+      const failedPaymentIntent = event.data.object;
+      console.log(`❌ Échec de capture pour le PaymentIntent ${failedPaymentIntent.id}: ${failedPaymentIntent.last_payment_error?.message || 'cause inconnue'}`);
+      // ICI : ajoutez votre logique métier (alerte, tentative de recapture, email admin, etc.)
+      break;
+    case 'payment_intent.succeeded':
+      const succeededPaymentIntent = event.data.object;
+      console.log(`✅ Capture réussie pour le PaymentIntent ${succeededPaymentIntent.id}`);
+      // Vous pouvez aussi déclencher une action (ex: mise à jour de base de données)
+      break;
+    default:
+      console.log(`⚠️  Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
+
+// ========== Route de test ==========
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
 const port = process.env.PORT || 10000;
