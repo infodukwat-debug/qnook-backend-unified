@@ -41,13 +41,19 @@ app.post('/create_payment_intent', async (req, res) => {
       amount: parseInt(amount),
       currency,
       payment_method_types: payment_method_types || ['card_present'],
-      capture_method: 'manual', // Préautorisation
+      capture_method: 'manual',
       description: description || 'Paiement Qnook',
+      payment_method_options: {
+        card_present: {
+          request_incremental_authorization_support: true, // indispensable pour incrementAuthorization
+        },
+      },
     };
     if (email) intentParams.receipt_email = email;
     const intent = await stripe.paymentIntents.create(intentParams);
     res.json({ client_secret: intent.client_secret });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -132,9 +138,8 @@ app.delete('/api/products/:id', (req, res) => {
   }
 });
 
-// ========== ROUTES AJOUTÉES POUR LA GESTION DU TEMPS SUPPLÉMENTAIRE ==========
+// ========== ROUTES POUR LA GESTION DU TEMPS SUPPLÉMENTAIRE ==========
 
-// Incrémenter l'autorisation (appelé si le montant final dépasse l'autorisation initiale)
 app.post('/increment-authorization', async (req, res) => {
   const { paymentIntentId, newAmount } = req.body;
   if (!paymentIntentId || !newAmount) {
@@ -152,7 +157,6 @@ app.post('/increment-authorization', async (req, res) => {
   }
 });
 
-// Capturer le paiement (débit final)
 app.post('/capture-payment', async (req, res) => {
   const { paymentIntentId } = req.body;
   if (!paymentIntentId) {
@@ -167,7 +171,6 @@ app.post('/capture-payment', async (req, res) => {
   }
 });
 
-// ========== Route de test ==========
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
 const port = process.env.PORT || 10000;
