@@ -41,7 +41,7 @@ app.post('/create_payment_intent', async (req, res) => {
       amount: parseInt(amount),
       currency,
       payment_method_types: payment_method_types || ['card_present'],
-      capture_method: 'automatic',
+      capture_method: 'manual', // Préautorisation
       description: description || 'Paiement Qnook',
     };
     if (email) intentParams.receipt_email = email;
@@ -92,7 +92,7 @@ app.post('/api/products', (req, res) => {
     if (!name || price === undefined) return res.status(400).json({ error: 'Missing name or price' });
     const products = JSON.parse(fs.readFileSync(productsFile, 'utf8'));
     const newId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1;
-    const newProduct = { id: newId, name, price, image: image || '🕐', promo: promo || null };
+    const newProduct = { id: newId, name, price, image: image || '', promo: promo || null };
     products.push(newProduct);
     fs.writeFileSync(productsFile, JSON.stringify(products, null, 2));
     res.json(newProduct);
@@ -132,6 +132,42 @@ app.delete('/api/products/:id', (req, res) => {
   }
 });
 
+// ========== ROUTES AJOUTÉES POUR LA GESTION DU TEMPS SUPPLÉMENTAIRE ==========
+
+// Incrémenter l'autorisation (appelé si le montant final dépasse l'autorisation initiale)
+app.post('/increment-authorization', async (req, res) => {
+  const { paymentIntentId, newAmount } = req.body;
+  if (!paymentIntentId || !newAmount) {
+    return res.status(400).json({ error: 'Missing paymentIntentId or newAmount' });
+  }
+  try {
+    const incrementedIntent = await stripe.paymentIntents.incrementAuthorization(
+      paymentIntentId,
+      { amount: newAmount }
+    );
+    res.json({ success: true, paymentIntent: incrementedIntent });
+  } catch (err) {
+    console.error("Erreur lors de l'incrémentation:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Capturer le paiement (débit final)
+app.post('/capture-payment', async (req, res) => {
+  const { paymentIntentId } = req.body;
+  if (!paymentIntentId) {
+    return res.status(400).json({ error: 'Missing paymentIntentId' });
+  }
+  try {
+    const capturedIntent = await stripe.paymentIntents.capture(paymentIntentId);
+    res.json({ success: true, paymentIntent: capturedIntent });
+  } catch (err) {
+    console.error("Erreur lors de la capture:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== Route de test ==========
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
 const port = process.env.PORT || 10000;
