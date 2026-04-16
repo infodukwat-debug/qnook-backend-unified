@@ -6,14 +6,45 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 
 const app = express();
+
+// ========== Configuration CORS ==========
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+
+// ========== Route webhook (doit être avant express.json) ==========
+app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) throw new Error("Missing webhook secret");
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.log(`Webhook signature verification failed.`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  switch (event.type) {
+    case 'payment_intent.capture_failed':
+      console.log(`❌ Échec de capture pour ${event.data.object.id}`);
+      break;
+    case 'payment_intent.succeeded':
+      console.log(`✅ Capture réussie pour ${event.data.object.id}`);
+      break;
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+  res.json({ received: true });
+});
+
+// ========== Middleware JSON pour les autres routes ==========
 app.use(express.json());
 
+// ========== Initialisation Stripe ==========
 const stripe = Stripe(process.env.STRIPE_TEST_SECRET_KEY, {
   apiVersion: '2025-02-24.acacia',
 });
 const productsFile = path.join(__dirname, 'products.json');
 
+// ========== Configuration Nodemailer ==========
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -137,23 +168,6 @@ app.post('/update-payment-intent', async (req, res) => {
     const updatedIntent = await stripe.paymentIntents.update(paymentIntentId, { description });
     res.json({ success: true, paymentIntent: updatedIntent });
   } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ========== Webhook (optionnel) ==========
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!webhookSecret) throw new Error("Missing webhook secret");
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) { return res.status(400).send(`Webhook Error: ${err.message}`); }
-  switch (event.type) {
-    case 'payment_intent.capture_failed': console.log(`❌ Échec de capture pour ${event.data.object.id}`); break;
-    case 'payment_intent.succeeded': console.log(`✅ Capture réussie pour ${event.data.object.id}`); break;
-    default: console.log(`Unhandled event type ${event.type}`);
-  }
-  res.json({ received: true });
 });
 
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
