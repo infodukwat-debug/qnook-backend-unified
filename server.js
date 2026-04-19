@@ -85,6 +85,22 @@ app.post('/create_payment_intent', async (req, res) => {
   }
 });
 
+app.post('/update-payment-intent', async (req, res) => {
+  const { paymentIntentId, description } = req.body;
+  if (!paymentIntentId || !description) {
+    return res.status(400).json({ error: 'Missing paymentIntentId or description' });
+  }
+  try {
+    const updatedIntent = await stripe.paymentIntents.update(paymentIntentId, {
+      description: description,
+    });
+    res.json({ success: true, paymentIntent: updatedIntent });
+  } catch (err) {
+    console.error("Erreur mise à jour description:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/send-reminder', async (req, res) => {
   const { email, productName, durationChosen } = req.body;
   if (!email || !productName || durationChosen === undefined) return res.status(400).json({ error: 'Missing fields' });
