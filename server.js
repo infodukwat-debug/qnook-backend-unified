@@ -152,23 +152,27 @@ app.post('/increment-authorization', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ... (tout le reste du code inchangé)
+
 app.post('/capture-payment', async (req, res) => {
-  const { paymentIntentId } = req.body;
-  if (!paymentIntentId) return res.status(400).json({ error: 'Missing paymentIntentId' });
+  const { paymentIntentId, amountToCapture } = req.body;
+  if (!paymentIntentId) {
+    return res.status(400).json({ error: 'Missing paymentIntentId' });
+  }
   try {
-    const capturedIntent = await stripe.paymentIntents.capture(paymentIntentId);
+    let captureParams = {};
+    if (amountToCapture && amountToCapture > 0) {
+      captureParams.amount_to_capture = amountToCapture;
+    }
+    const capturedIntent = await stripe.paymentIntents.capture(paymentIntentId, captureParams);
     res.json({ success: true, paymentIntent: capturedIntent });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error("Erreur lors de la capture:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/update-payment-intent', async (req, res) => {
-  const { paymentIntentId, description } = req.body;
-  if (!paymentIntentId || !description) return res.status(400).json({ error: 'Missing paymentIntentId or description' });
-  try {
-    const updatedIntent = await stripe.paymentIntents.update(paymentIntentId, { description });
-    res.json({ success: true, paymentIntent: updatedIntent });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// ... (le reste)
 
 app.get('/ping', (req, res) => res.json({ status: 'ok' }));
 
