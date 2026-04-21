@@ -52,6 +52,25 @@ const transporter = nodemailer.createTransport({
   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
 });
 
+// Route pour capturer le paiement (avec capture partielle)
+app.post('/capture-payment', async (req, res) => {
+  const { paymentIntentId, amountToCapture } = req.body;
+  if (!paymentIntentId) {
+    return res.status(400).json({ error: 'Missing paymentIntentId' });
+  }
+  try {
+    let captureParams = {};
+    if (amountToCapture && amountToCapture > 0) {
+      captureParams.amount_to_capture = amountToCapture;
+    }
+    const capturedIntent = await stripe.paymentIntents.capture(paymentIntentId, captureParams);
+    res.json({ success: true, paymentIntent: capturedIntent });
+  } catch (err) {
+    console.error("Erreur lors de la capture:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== Routes Stripe Terminal ==========
 app.post('/connection_token', async (req, res) => {
   try {
